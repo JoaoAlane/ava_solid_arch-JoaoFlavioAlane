@@ -1,203 +1,280 @@
-const Pet = require('../models/Pet');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
-const mongoose = require('mongoose');
+const Pet = require("../models/Pet");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
+const ObjectId = require("mongoose").Types.ObjectId;
 
-const getToken = require('../helpers/get-token');
-const getUserByToken = require('../helpers/get-user-by-token');
+const getToken = require("../helpers/get-token");
+const getUserByToken = require("../helpers/get-user-by-token");
 
 module.exports = class PetController {
-    static async create(req, res) {
-        const { name, age, weight, color } = req.body;
-        
-        if (!name) {
-            res.status(422).json({ message: 'O nome é obrigatório!' });
-            return;
-        }
+  static async create(req, res) {
+    const { name, age, weight, color } = req.body;
 
-        if (!age) {
-            res.status(422).json({ message: 'A idade é obrigatória!' });
-            return;
-        }
+    if (!name) {
+      res.status(422).json({ message: "O nome é obrigatório!" });
+      return;
+    }
 
-        if (!weight) {
-            res.status(422).json({ message: 'O peso é obrigatório!' });
-            return;
-        }
+    if (!age) {
+      res.status(422).json({ message: "A idade é obrigatória!" });
+      return;
+    }
 
-        if (!color) {
-            res.status(422).json({ message: 'A cor é obrigatória!' });
-            return;
-        }
+    if (!weight) {
+      res.status(422).json({ message: "O peso é obrigatório!" });
+      return;
+    }
 
-        if (!req.files || req.files.length === 0) {
-            res.status(422).json({ message: 'A imagem é obrigatória!' });
-            return;
-        }
+    if (!color) {
+      res.status(422).json({ message: "A cor é obrigatória!" });
+      return;
+    }
 
-        const images = req.files.map((file) => file.filename);
+    if (!req.files || req.files.length === 0) {
+      res.status(422).json({ message: "As imagens são obrigatórias!" });
+      return;
+    }
 
-        const token = getToken(req);
-        const user = await getUserByToken(token);
+    const images = req.files.map((file) => file.filename);
 
-        const pet = new Pet({
-            name,
-            age,
-            weight,
-            color,
-            images: images,
-            available: true,
-            user: {
-                _id: user._id,
-                name: user.name,
-                image: user.image,
-                phone: user.phone,
-            },
+    const token = getToken(req);
+    const user = await getUserByToken(token);
+
+    const pet = new Pet({
+      name,
+      age,
+      weight,
+      color,
+      image: images,
+      available: true,
+      user: {
+        _id: user._id,
+        name: user.name,
+        image: user.image,
+        phone: user.phone,
+      },
+    });
+
+    try {
+      const newPet = await pet.save();
+      res.status(201).json({ message: "Pet cadastrado com sucesso!", newPet });
+    } catch (error) {
+      res
+        .status(500)
+        .json({
+          message: "Aconteceu um erro no servidor, tente novamente mais tarde!",
         });
-
-        try {
-            const newPet = await pet.save();
-            res.status(201).json({ message: 'Pet cadastrado com sucesso!', newPet });
-
-        } catch (error) {
-            res.status(500).json({ message: 'Aconteceu um erro no servidor, tente novamente mais tarde.' });
-        }
     }
-    static async getAll(req, res) {
-       const pets = await Pet.find().sort('-createdAt');
-       res.status(200).json({ pets: pets });
-    }
-    static async getAllUserPets(req, res) {
-       const token = getToken(req);
-       const user = await getUserByToken(token);
-       const pets = await Pet.find({ 'user._id': user._id }).sort('-createdAt');
-       res.status(200).json({ pets: pets });
-    }
-    static async getAllUserAdoptions(req, res) {
-       const token = getToken(req);
-       const user = await getUserByToken(token);
-       const adoptions = await Adoption.find({ 'user._id': user._id }).sort('-createdAt');
-       res.status(200).json({ adoptions: adoptions });
-    }
-    static async schedule(req, res) {
-        res.status(200).json({ message: 'em breve...' });
-    }
-    static async concludeAdoption(req, res) {
-        res.status(200).json({ message: 'em breve...' });
-    }
-    static async updatePet(req, res) {
-        const id = req.params.id;
-        const name = req.body.name;
-        const age = req.body.age;
-        const weight = req.body.weight;
-        const color = req.body.color;
-        const available = req.body.available;
-        const images = req.files;
-        const description = req.body.description;
+  }
+  static async getAll(req, res) {
+    const pets = await Pet.find().sort("-createdAt");
+    res.status(200).json({ pets: pets });
+  }
+  static async getAllUserPets(req, res) {
+    const token = getToken(req);
+    const user = await getUserByToken(token);
+    const pets = await Pet.find({ "user._id": user._id }).sort("-createdAt");
+    res.status(200).json({ pets: pets });
+  }
+  static async getAllUserAdoptions(req, res) {
+    const token = getToken(req);
+    const user = await getUserByToken(token);
+    const adoptions = await Adoption.find({ "user._id": user._id }).sort(
+      "-createdAt",
+    );
+    res.status(200).json({ adoptions: adoptions });
+  }
+  static async getPetById(req, res) {
+    const id = req.params.id;
 
-        const updateData = {};
-
-        if (!ObjectId.isValid(id)) {
-            res.status(422).json({ message: 'ID inválido!' });
-            return;
-        }
-
-        const pet = await Pet.findOne({ _id: id });
-
-        if (!pet) {
-            res.status(404).json({ message: 'Pet não encontrado!' });
-            return;
-        }
-        const token = getToken(req);
-        const user = await getUserByToken(token);
-
-        if (pet.user._id.toString() !== user._id.toString()) {
-            res.status(422).json({ message: 'Houve um problema em processar a sua solicitação, tente novamente mais tarde.' });
-            return;
-        }
-
-        if(!name) {
-            res.status(422).json({ message: 'O nome é obrigatório!' });
-            return;
-            else {
-                updateData.name = name;
-            }
-        }
-
-        if(!age) {
-            res.status(422).json({ message: 'A idade é obrigatória!' });
-            return;
-        } else {
-            updateData.age = age;
-        }
-
-        if(!weight) {
-            res.status(422).json({ message: 'O peso é obrigatório!' });
-            return;
-        } else {
-            updateData.weight = weight;
-        }
-
-        if(!color) {
-            res.status(422).json({ message: 'A cor é obrigatória!' });
-            return;
-        } else {
-            updateData.color = color;
-        }
-        if(images && images.length > 0) {
-            updateData.images = [];
-            images.map((image) => {
-                updateData.images.push(image.filename);
-            });
-        }
-
-        updateData.description = description;
-
-        await Pet.findByIdAndUpdate(id, updateData);
-        res.status(200).json({ message: 'Pet atualizado com sucesso!' });
-    }
-    static async removePetById(req, res) {
-        const id = req.params.id;
-
-        if (!ObjectId.isValid(id)) {
-            res.status(422).json({ message: 'ID inválido!' });
-            return;
-        }
-
-        const pet = await Pet.findOne({ _id: id });
-
-        if (!pet) {
-            res.status(404).json({ message: 'Pet não encontrado!' });
-            return;
-        }
-
-        const token = getToken(req);
-        const user = await getUserByToken(token);
-        if (pet.user._id.toString() !== user._id.toString()) {
-            res.status(422).json({ message: 'Houve um problema em processar a sua solicitação, tente novamente mais tarde.' });
-            return;
-        }
-
-        await Pet.findByIdAndDelete(id);
-        res.status(200).json({ message: 'Pet removido com sucesso!' });
-    }
-    static async getPetById(req, res) {
-        const id = req.params.id;
-
-        if (!ObjectId.isValid(id)) {
-            res.status(422).json({ message: 'ID inválido!' });
-            return;
-        }
-
-        const pet = await Pet.findOne({ _id: id });
-
-        if (!pet) {
-            res.status(404).json({ message: 'Pet não encontrado!' });
-            return;
-        }
-
-        res.status(200).json({ pet: pet });
+    if (!ObjectId.isValid(id)) {
+      res.status(422).json({ message: "ID inválido!" });
+      return;
     }
 
+    const pet = await Pet.findOne({ _id: id });
+
+    if (!pet) {
+      res.status(404).json({ message: "Pet não encontrado!" });
+      return;
+    }
+    res.status(200).json({ pet: pet });
+  }
+  static async removePetById(req, res) {
+    const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      res.status(422).json({ message: "ID inválido!" });
+      return;
+    }
+
+    const pet = await Pet.findOne({ _id: id });
+
+    if (!pet) {
+      res.status(404).json({ message: "Pet não encontrado!" });
+      return;
+    }
+
+    const token = getToken(req);
+    const user = await getUserByToken(token);
+
+    if (pet.user._id.toString() !== user._id.toString()) {
+      res
+        .status(422)
+        .json({ message: "Ocorreu um erro, tente novamente mais tarde!" });
+      return;
+    }
+  }
+  static async updatePet(req, res) {
+    const id = req.params.id;
+    const name = req.body.name;
+    const age = req.body.age;
+    const weight = req.body.weight;
+    const color = req.body.color;
+    const description = req.body.description;
+    const images = req.files;
+    const available = req.body.available;
+
+    const updateData = {};
+
+    if (!ObjectId.isValid(id)) {
+      res.status(422).json({ message: "ID inválido!" });
+      return;
+    }
+
+    const pet = await Pet.findOne({ _id: id });
+
+    if (!pet) {
+      res.status(404).json({ message: "Pet não encontrado!" });
+      return;
+    }
+
+    const token = getToken(req);
+    const user = await getUserByToken(token);
+
+    if (pet.user._id.toString() !== user._id.toString()) {
+      res
+        .status(422)
+        .json({ message: "Ocorreu um erro, tente novamente mais tarde!" });
+      return;
+    }
+
+    if (!name) {
+      res.status(422).json({ message: "O nome é obrigatório!" });
+      return;
+    } else {
+      updateData.name = name;
+    }
+
+    if (!age) {
+      res.status(422).json({ message: "A idade é obrigatória!" });
+      return;
+    } else {
+      updateData.age = age;
+    }
+
+    if (!weight) {
+      res.status(422).json({ message: "O peso é obrigatório!" });
+      return;
+    } else {
+      updateData.weight = weight;
+    }
+
+    if (!color) {
+      res.status(422).json({ message: "A cor é obrigatória!" });
+      return;
+    } else {
+      updateData.color = color;
+    }
+
+    if (images && images.length > 0) {
+      updateData.image = [];
+      images.map((image) => {
+        updateData.image.push(image.filename);
+      });
+    }
+
+    updateData.description = description;
+
+    await Pet.findByIdAndUpdate(id, updateData);
+
+    res.status(200).json({ message: "Pet atualizado com sucesso!" });
+  }
+  static async schedule(req, res) {
+    const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      res.status(422).json({ message: "ID inválido!" });
+      return;
+    }
+    const pet = await Pet.findOne({ _id: id });
+
+    if (!pet) {
+      res.status(404).json({ message: "Pet não encontrado!" });
+      return;
+    }
+    const token = getToken(req);
+    const user = await getUserByToken(token);
+
+    if (pet.user._id.equals(user._id)) {
+      res
+        .status(422)
+        .json({
+          message: "Você não pode agendar uma visita com seu próprio pet!",
+        });
+      return;
+    }
+
+    if (pet.adopter && pet.adopter._id.equals(user._id)) {
+      res
+        .status(422)
+        .json({ message: "Você já agendou uma visita para este pet!" });
+      return;
+    }
+
+    pet.adopter = {
+      _id: user._id,
+      name: user.name,
+      image: user.image,
+    };
+
+    await Pet.findByIdAndUpdate(pet._id, pet);
+
+    res
+      .status(200)
+      .json({
+        message: `Visita agendada com sucesso, entre em contato com ${pet.user.name} pelo telefone ${pet.user.phone} para combinar a visita!`,
+      });
+  }
+  static async concludeAdoption(req, res) {
+    const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      res.status(422).json({ message: "ID inválido!" });
+      return;
+    }
+    const pet = await Pet.findOne({ _id: id });
+
+    if (!pet) {
+      res.status(404).json({ message: "Pet não encontrado!" });
+      return;
+    }
+    const token = getToken(req);
+    const user = await getUserByToken(token);
+
+    if (pet.user._id.toString() !== user._id.toString()) {
+      res
+        .status(422)
+        .json({ message: "Apenas o dono do pet pode concluir a adoção!" });
+      return;
+    }
+
+    pet.available = false;
+
+    await Pet.findByIdAndUpdate(pet._id, pet);
+
+    res
+      .status(200)
+      .json({ message: "Parabéns! A adoção foi concluída com sucesso!" });
+  }
 };
-
